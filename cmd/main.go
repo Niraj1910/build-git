@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func main() {
@@ -47,6 +48,16 @@ func main() {
 		}
 		objectHash := os.Args[3]
 		if err := catFile(objectHash); err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+	case "ls-tree":
+		if len(os.Args) < 3 || os.Args[2] != "-p" {
+			fmt.Println("usage: your_git.sh ls-tree -p <tree-hash>")
+		}
+		treeHash := os.Args[3]
+		if err := lsTree(treeHash); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
@@ -132,25 +143,41 @@ func hashObject(fileName string) error {
 	return nil
 }
 
-func catFile(hash string) error {
-
+func readHashFile(hash string) ([]byte, error) {
 	objDir := filepath.Join(".git", "objects", hash[:2])
 	objFile := filepath.Join(objDir, hash[2:])
-	contentBytes, err := os.ReadFile(objFile)
+	hashedBytes, err := os.ReadFile(objFile)
 	if err != nil {
-		return fmt.Errorf("failed to read contentBytes from %s : %w", objFile, err)
+		return nil, fmt.Errorf("failed to read hashedBytes from %s : %w", objFile, err)
 	}
+	return hashedBytes, nil
+}
 
-	decompress := bytes.NewReader(contentBytes)
+func decompressZlib(data []byte) ([]byte, error) {
+	decompress := bytes.NewReader(data)
 	z, err := zlib.NewReader(decompress)
 	if err != nil {
-		return fmt.Errorf("zlib new reader: %w", err)
+		return nil, fmt.Errorf("zlib new reader: %w", err)
 	}
 	defer z.Close()
 
-	data, err := io.ReadAll(z)
+	data, err = io.ReadAll(z)
 	if err != nil {
-		return fmt.Errorf("failed to read from zlib: %w", err)
+		return nil, fmt.Errorf("failed to read from zlib: %w", err)
+	}
+	return data, nil
+}
+
+func catFile(hash string) error {
+
+	contentBytes, err := readHashFile(hash)
+	if err != nil {
+		return err
+	}
+
+	data, err := decompressZlib(contentBytes)
+	if err != nil {
+		return err
 	}
 
 	nullIndex := bytes.IndexByte(data, 0)
@@ -161,6 +188,58 @@ func catFile(hash string) error {
 	contentStr := data[nullIndex+1:]
 
 	fmt.Println(string(contentStr))
+
+	return nil
+}
+
+func lsTree(treeHash string) error {
+
+	// mode blob hash name
+	hashedBytes, err := readHashFile(treeHash)
+	if err != nil {
+		return err
+	}
+
+	decompressedContent, err := decompressZlib(hashedBytes)
+
+	/*
+		example of binary content of tree
+		100644 test.txt\0[20-byte binary hash for blob]
+		040000 docs\0[20-byte binary hash for sub-tree]
+	*/
+
+	pos := 0
+	for pos < len(decompressedContent) {
+		// Find space -> mode ends
+		spaceIdx := bytes.IndexByte(decompressedContent[pos:], ' ')
+		modeStr := string(decompressedContent[pos : pos+spaceIdx])
+		pos = spaceIdx + 1 // skip space
+
+		nullIdx := bytes.IndexByte(decompressedContent[pos:], 0)
+		if nullIdx == -1 {
+			return fmt.Errorf("invalid tree format: no null byte after name")
+		}
+		nameStr := string(decompressedContent[pos : pos+nullIdx])
+
+		pos = nullIdx + 1 // slip \0
+
+		// check for 20 bytes = hash
+		if pos+20 > len(decompressedContent) {
+			break
+		}
+
+		hashBin := decompressedContent[pos : pos+20]
+		hashHex := fmt.Sprintf("%x", hashBin)
+
+		pos += 20
+
+		// type for blob
+		isBlob := "blob"
+		if strings.HasPrefix(modeStr, "04") {
+			isBlob = "tree"
+		}
+		fmt.Printf("%s %s %s\t %s", modeStr, isBlob, nameStr, hashHex)
+	}
 
 	return nil
 }
