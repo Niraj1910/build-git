@@ -16,15 +16,3 @@ Inspired by the CodeCrafters Git challenge — built to deeply understand how Gi
 - `git commit-tree <tree> [-p <parent>] [-m <message>]` — creates a commit object with tree, optional parent, author, committer, and message
 
 All commands handle real Git loose object format, binary parsing, compression, and hashing.
-
-## Project Structure
-`build-git/
-├── cmd/
-│   └── main.go               # CLI entrypoint & command dispatcher
-├── objects/
-│   ├── object.go             # low-level read/write/compress/decompress/hash
-│   └── blob.go               # blob creation & hashing
-├── tree/
-│   ├── tree.go               # ls-tree parsing, write-tree recursive building & commit-tree object creation
-└── go.mod
-`
