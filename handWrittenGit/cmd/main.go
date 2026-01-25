@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/niraj1910/build-GIT/clone"
 	"github.com/niraj1910/build-GIT/objects"
 	"github.com/niraj1910/build-GIT/tree"
 )
@@ -119,6 +121,50 @@ func main() {
 		}
 		fmt.Println(commitHash)
 
+	case "clone":
+		if len(os.Args) < 3 {
+			fmt.Println("usage: /your_git.sh clone <url> [directory]")
+			os.Exit(1)
+		}
+
+		dir := filepath.Base(os.Args[2])
+		if strings.HasSuffix(dir, ".git") {
+			dir = dir[:len(dir)-4] // remove the .git
+		}
+
+		if len(os.Args) > 3 { // if present get [directory]
+			dir = os.Args[3]
+		}
+
+		err := os.MkdirAll(dir, 0755)
+		if err != nil {
+			fmt.Printf("failed to create directory '%s' :%w", dir, err)
+			os.Exit(1)
+		}
+
+		// go back to original directory
+		originalDir, _ := os.Getwd()
+		defer os.Chdir(originalDir)
+
+		err = os.Chdir(dir)
+		if err != nil {
+			fmt.Printf("failed to cd into '%s' :%w", dir, err)
+			os.Exit(1)
+		}
+
+		err = gitInit()
+		if err != nil {
+			fmt.Printf("failed to git init into '%s' :%w", dir, err)
+			os.Exit(1)
+		}
+
+		fmt.Printf("Cloning into %s ....\n", dir)
+
+		err = clone.FetchRefs(os.Args[2])
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 	default:
 		fmt.Printf("unknown command: %s\n", command)
 		os.Exit(1)

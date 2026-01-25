@@ -44,8 +44,8 @@ func Compress(data []byte) ([]byte, error) {
 }
 
 func DecompressZlib(data []byte) ([]byte, error) {
-	decompress := bytes.NewReader(data)
-	z, err := zlib.NewReader(decompress)
+	compressed := bytes.NewReader(data)
+	z, err := zlib.NewReader(compressed)
 	if err != nil {
 		return nil, fmt.Errorf("zlib new reader: %w", err)
 	}
